@@ -1,34 +1,80 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
-  <title>Multi-Flow XIRR Calculator</title>
+  <title>Enhanced XIRR Calculator</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0 }
+    /*===== CSS VARIABLES & THEMES =====*/
+    :root {
+      --bg: #f0f2f5;
+      --card-bg: #ffffff;
+      --text: #333333;
+      --accent: #5563DE;
+      --error: #E74C3C;
+      --input-bg: #fff;
+      --input-border: #ccc;
+      --button-bg: var(--accent);
+      --button-hover: #4353C8;
+    }
+    [data-theme="dark"] {
+      --bg: #1e1e28;
+      --card-bg: #2a2a38;
+      --text: #e0e0e8;
+      --accent: #7A8CFF;
+      --error: #FF6B6B;
+      --input-bg: #333;
+      --input-border: #555;
+      --button-bg: var(--accent);
+      --button-hover: #5e75d1;
+    }
+
+    /*===== RESET & LAYOUT =====*/
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', sans-serif;
       display: flex;
       align-items: center;
       justify-content: center;
       min-height: 100vh;
-      background: linear-gradient(135deg, #74ABE2, #5563DE);
-      font-family: 'Segoe UI', sans-serif;
-      color: #333;
+      transition: background 0.3s, color 0.3s;
     }
     .card {
-      background: #fff;
+      background: var(--card-bg);
       border-radius: 12px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.1);
       padding: 24px;
-      width: 400px;
+      width: 420px;
+      transition: background 0.3s, color 0.3s;
+      position: relative;
     }
     h2 {
       text-align: center;
       margin-bottom: 20px;
-      color: #5563DE;
+      color: var(--accent);
     }
+
+    /*===== THEME TOGGLE =====*/
+    .theme-toggle {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+
+    /*===== FORM FIELDS =====*/
     .field {
-      margin-bottom: 16px;
+      margin-bottom: 14px;
+      position: relative;
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 0.3s, transform 0.3s;
     }
     .inline {
       display: inline-block;
@@ -36,56 +82,80 @@
       margin-right: 5%;
       vertical-align: top;
     }
-    .inline:last-child {
-      margin-right: 0;
-    }
+    .inline:last-child { margin-right: 0; }
     label {
       display: block;
       margin-bottom: 6px;
       font-size: 0.9rem;
       font-weight: 600;
-      color: #555;
     }
     input {
       width: 100%;
       padding: 8px;
-      border: 1px solid #ccc;
+      border: 1px solid var(--input-border);
+      background: var(--input-bg);
       border-radius: 6px;
       font-size: 0.95rem;
+      transition: border-color 0.3s, background 0.3s;
     }
     input[readonly] {
-      background: #f5f5f5;
-      border-color: #ddd;
+      background: var(--bg);
     }
+    .error-msg {
+      font-size: 0.8rem;
+      color: var(--error);
+      position: absolute;
+      bottom: -18px;
+      left: 0;
+      display: none;
+    }
+    .invalid input {
+      border-color: var(--error);
+    }
+    .invalid .error-msg {
+      display: block;
+    }
+
+    /*===== BUTTONS =====*/
     .btn {
       width: 100%;
       padding: 10px;
-      background: #5563DE;
-      color: white;
+      background: var(--button-bg);
+      color: #fff;
       border: none;
       border-radius: 6px;
       font-size: 1rem;
       cursor: pointer;
       transition: background 0.3s;
+      margin-top: 6px;
     }
-    .btn:hover {
-      background: #4353C8;
-    }
+    .btn:hover { background: var(--button-hover); }
     .btn.small {
       width: auto;
       padding: 6px 12px;
-      background: #6C7AE0;
-      margin-bottom: 20px;
+      font-size: 0.9rem;
+      margin-bottom: 16px;
     }
     .remove-btn {
       background: transparent;
       border: none;
-      color: #E74C3C;
+      color: var(--error);
       font-size: 1.2rem;
       cursor: pointer;
       line-height: 1;
       vertical-align: top;
       margin-top: 24px;
+    }
+
+    /*===== ANIMATIONS =====*/
+    .flow-row {
+      overflow: hidden;
+      max-height: 200px;
+      transition: max-height 0.4s ease, opacity 0.4s ease;
+    }
+    .flow-row.removing {
+      max-height: 0;
+      opacity: 0;
     }
     canvas {
       margin-top: 24px;
@@ -96,179 +166,183 @@
 </head>
 <body>
   <div class="card">
+    <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
     <h2>XIRR Calculator</h2>
 
-    <div class="field">
+    <div class="field" id="nameField">
       <label for="invName">Name of Investment</label>
-      <input id="invName" type="text" placeholder="Equity Fund A">
+      <input id="invName" type="text" placeholder="Equity Fund A" onblur="validateText('invName','nameField')" />
+      <span class="error-msg">Required</span>
     </div>
 
     <div id="flows">
       <div class="flow-row">
-        <div class="inline field">
-          <label>Date of Investment</label>
-          <input type="date" class="date">
+        <div class="inline field" id="dateField-0">
+          <label>Date</label>
+          <input type="date" class="date" onblur="validateDate(this,'dateField-0')" />
+          <span class="error-msg">Required</span>
         </div>
-        <div class="inline field">
+        <div class="inline field" id="amtField-0">
           <label>Amount (₹)</label>
-          <input type="number" class="amount" placeholder="–10000">
+          <input type="number" class="amount" placeholder="-10000" onblur="validateNumber(this,'amtField-0')" />
+          <span class="error-msg">Invalid</span>
         </div>
-        <div class="inline field">
-          <label>NAV on Date</label>
-          <input type="number" step="0.0001" class="nav" placeholder="25.30">
+        <div class="inline field" id="navField-0">
+          <label>NAV</label>
+          <input type="number" step="0.0001" class="nav" placeholder="25.30" onblur="validateNumber(this,'navField-0')" />
+          <span class="error-msg">Invalid</span>
         </div>
         <button class="remove-btn" onclick="removeRow(this)">×</button>
+        <button class="btn small" onclick="fetchNAV(0)">Fetch NAV</button>
       </div>
     </div>
 
     <button class="btn small" onclick="addRow()">Add Cash Flow</button>
 
-    <div class="field">
+    <div class="field" id="finalDateField">
       <label for="finalDate">Date of Compute</label>
-      <input id="finalDate" type="date">
+      <input id="finalDate" type="date" onblur="validateDate(this,'finalDateField')" />
+      <span class="error-msg">Required</span>
     </div>
 
-    <div class="field">
+    <div class="field" id="finalNavField">
       <label for="finalNav">NAV on Compute Date</label>
-      <input id="finalNav" type="number" step="0.0001" placeholder="36.25">
+      <input id="finalNav" type="number" step="0.0001" placeholder="36.25" onblur="validateNumber(this,'finalNavField')" />
+      <span class="error-msg">Invalid</span>
+      <button class="btn small" onclick="fetchNAV('final')" style="margin-top:6px">Fetch NAV</button>
     </div>
 
-    <button class="btn" onclick="calculate()">Compute</button>
+    <button class="btn" onclick="calculate()">Compute XIRR</button>
+    <button class="btn" onclick="exportCSV()">Export CSV</button>
 
     <div class="field">
       <label>Final XIRR (%)</label>
-      <input id="xirrResult" readonly>
+      <input id="xirrResult" readonly />
     </div>
     <div class="field">
       <label>Total Funds Accumulated (₹)</label>
-      <input id="totalFunds" readonly>
+      <input id="totalFunds" readonly />
     </div>
     <div class="field">
       <label>Total Profit Earned (₹)</label>
-      <input id="profit" readonly>
+      <input id="profit" readonly />
     </div>
 
     <canvas id="chart"></canvas>
   </div>
 
   <script>
-    function toDays(d) {
-      return new Date(d).getTime() / (1000 * 60 * 60 * 24);
+    /*========== THEME TOGGLE ==========*/
+    function toggleTheme() {
+      document.documentElement.dataset.theme =
+        document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
     }
 
+    /*========== VALIDATION ==========*/
+    function validateText(id, fieldId) {
+      const val = document.getElementById(id).value.trim();
+      toggleInvalid(fieldId, val === '');
+    }
+    function validateDate(input, fieldId) {
+      toggleInvalid(fieldId, !input.value);
+    }
+    function validateNumber(input, fieldId) {
+      const v = parseFloat(input.value);
+      toggleInvalid(fieldId, isNaN(v) || v === 0);
+    }
+    function toggleInvalid(fieldId, isInvalid) {
+      document.getElementById(fieldId).classList.toggle('invalid', isInvalid);
+    }
+
+    /*========== ROW HANDLING ==========*/
+    let flowCount = 1;
     function addRow() {
       const container = document.getElementById('flows');
-      const row = document.querySelector('.flow-row').cloneNode(true);
+      const idx = flowCount++;
+      const template = document.querySelector('.flow-row');
+      const row = template.cloneNode(true);
       row.querySelectorAll('input').forEach(i => i.value = '');
+      // re-id fields
+      row.querySelector('.date').setAttribute('onblur', `validateDate(this,'dateField-${idx}')`);
+      row.querySelector('.amount').setAttribute('onblur', `validateNumber(this,'amtField-${idx}')`);
+      row.querySelector('.nav').setAttribute('onblur', `validateNumber(this,'navField-${idx}')`);
+      row.querySelector('.remove-btn').setAttribute('onclick', 'removeRow(this)');
+      row.querySelector('.btn.small').setAttribute('onclick', `fetchNAV(${idx})`);
+      row.querySelectorAll('.field').forEach(f => {
+        const cls = f.classList;
+        if (cls.contains('field')) {
+          const base = f.querySelector('input').classList.contains('date') ? 'dateField' :
+                       f.querySelector('input').classList.contains('amount') ? 'amtField' :
+                       'navField';
+          f.id = `${base}-${idx}`;
+        }
+      });
       container.appendChild(row);
+      // animate entry
+      requestAnimationFrame(() => {
+        row.style.opacity = '1';
+        row.style.maxHeight = '200px';
+      });
     }
-
     function removeRow(btn) {
-      const rows = document.querySelectorAll('.flow-row');
-      if (rows.length > 1) {
-        btn.parentElement.remove();
-      }
+      const row = btn.closest('.flow-row');
+      row.classList.add('removing');
+      setTimeout(() => row.remove(), 400);
     }
 
+    /*========== XIRR CALCULATION ==========*/
+    function toDays(d) { return new Date(d).getTime() / 86400000; }
     function computeXIRR(dates, amounts) {
       const eps = 1e-7;
-      let x0 = 0.1;
-      const dayDiffs = dates.map(d => toDays(d) - toDays(dates[0]));
-
-      function npv(rate) {
-        return amounts.reduce((sum, v, i) =>
-          sum + v / Math.pow(1 + rate, dayDiffs[i] / 365), 0);
+      let rate = 0.1;
+      const diffs = dates.map(d => toDays(d) - toDays(dates[0]));
+      function npv(r) {
+        return amounts.reduce((s, v, i) =>
+          s + v / Math.pow(1 + r, diffs[i] / 365), 0);
       }
-      function deriv(rate) {
-        return amounts.reduce((sum, v, i) =>
-          sum - (dayDiffs[i] / 365) * v / Math.pow(1 + rate, dayDiffs[i] / 365 + 1), 0);
+      function deriv(r) {
+        return amounts.reduce((s, v, i) =>
+          s - (diffs[i] / 365) * v / Math.pow(1 + r, diffs[i] / 365 + 1), 0);
       }
-
-      for (let i = 0; i < 50; i++) {
-        const fx = npv(x0), fpx = deriv(x0);
-        const x1 = x0 - fx / fpx;
-        if (Math.abs(x1 - x0) < eps) break;
-        x0 = x1;
+      for (let i=0; i<50; i++) {
+        const f = npv(rate), f1 = deriv(rate);
+        const next = rate - f/f1;
+        if (Math.abs(next-rate) < eps) break;
+        rate = next;
       }
-      return x0;
+      return rate;
     }
 
+    /*========== MAIN CALCULATE & CHART ==========*/
+    let chart = null;
     function calculate() {
+      // validate global inputs
+      validateText('invName','nameField');
+      validateDate({value: document.getElementById('finalDate').value},'finalDateField');
+      validateNumber({value: document.getElementById('finalNav').value},'finalNavField');
+      // collect flows
       const rows = document.querySelectorAll('.flow-row');
-      let flows = [];
+      const flows = [];
       let totalUnits = 0;
-      rows.forEach(r => {
+      rows.forEach((r, i) => {
         const d = r.querySelector('.date').value;
         const a = parseFloat(r.querySelector('.amount').value);
         const n = parseFloat(r.querySelector('.nav').value);
-        if (d && a && n) {
+        if (d && !isNaN(a) && a!==0 && !isNaN(n) && n>0) {
           const units = a / n;
           totalUnits += units;
           flows.push({ date: d, amount: -a, nav: n, units });
         }
       });
-
       const finalDate = document.getElementById('finalDate').value;
-      const finalNav = parseFloat(document.getElementById('finalNav').value);
-      const totalFunds = totalUnits * finalNav;
-      flows.push({ date: finalDate, amount: totalFunds, nav: finalNav, units: 0 });
+      const finalNav  = parseFloat(document.getElementById('finalNav').value);
+      const totalFunds= totalUnits * finalNav;
+      flows.push({ date: finalDate, amount: totalFunds, nav: finalNav, units:0 });
 
-      const dates = flows.map(f => f.date);
-      const amounts = flows.map(f => f.amount);
-      const rate = computeXIRR(dates, amounts);
+      // compute XIRR & profit
+      const rate = computeXIRR(flows.map(f=>f.date), flows.map(f=>f.amount));
+      const profit = totalFunds - flows.filter(f=>f.amount<0).reduce((s,f)=>s+(-f.amount),0);
 
-      document.getElementById('xirrResult').value = (rate * 100).toFixed(2);
-      document.getElementById('totalFunds').value = totalFunds.toFixed(2);
-
-      const invested = flows
-        .filter(f => f.amount < 0)
-        .reduce((s, f) => s + (-f.amount), 0);
-      document.getElementById('profit').value = (totalFunds - invested).toFixed(2);
-
-      updateChart(flows);
-    }
-
-    let myChart = null;
-    function updateChart(flows) {
-      let cumUnits = 0;
-      const labels = [];
-      const data = [];
-
-      flows.forEach(f => {
-        labels.push(f.date);
-        if (f.amount < 0) {
-          cumUnits += f.units;
-        }
-        data.push((cumUnits * f.nav).toFixed(2));
-      });
-
-      const ctx = document.getElementById('chart').getContext('2d');
-      if (myChart) myChart.destroy();
-
-      myChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Portfolio Value',
-            data,
-            borderColor: '#5563DE',
-            backgroundColor: 'rgba(85,99,222,0.2)',
-            fill: true,
-            tension: 0.3
-          }]
-        },
-        options: {
-          scales: {
-            x: { type: 'time', time: { unit: 'day' } },
-            y: { beginAtZero: true }
-          },
-          plugins: {
-            tooltip: { callbacks: { label: ctx => `₹ ${ctx.formattedValue}` } }
-          }
-        }
-      });
-    }
-  </script>
-</body>
-</html>
+      // populate results with flash animation
+      ['xirrResult','totalFunds','profit'].forEach(id => {
+        const el = document.getElementById(id);
