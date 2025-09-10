@@ -346,3 +346,104 @@
       // populate results with flash animation
       ['xirrResult','totalFunds','profit'].forEach(id => {
         const el = document.getElementById(id);
+        el.value = id==='xirrResult'
+          ? (rate*100).toFixed(2)
+          : id==='totalFunds'
+            ? totalFunds.toFixed(2)
+            : profit.toFixed(2);
+        el.style.transition = 'background 0.3s';
+        el.style.background = 'rgba(85,99,222,0.2)';
+        setTimeout(()=> el.style.background = '', 400);
+      });
+
+      updateChart(flows);
+    }
+
+    function updateChart(flows) {
+      let cum = 0, labels = [], data = [];
+      flows.forEach(f => {
+        labels.push(f.date);
+        if (f.amount < 0) cum += f.units;
+        data.push((cum*f.nav).toFixed(2));
+      });
+      const ctx = document.getElementById('chart').getContext('2d');
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Portfolio Value',
+            data,
+            borderColor: 'var(--accent)',
+            backgroundColor: 'rgba(85,99,222,0.2)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          scales: {
+            x: { type: 'time', time:{unit:'day'} },
+            y: { beginAtZero: true }
+          },
+          plugins: {
+            tooltip: { callbacks:{ label: ctx=> `₹ ${ctx.formattedValue}` } }
+          }
+        }
+      });
+    }
+
+    /*========== EXPORT CSV ==========*/
+    function exportCSV() {
+      const invName = document.getElementById('invName').value;
+      let csv = 'Investment,'+invName+'\nDate,Amount,NAV\n';
+      document.querySelectorAll('.flow-row').forEach(r=>{
+        const d = r.querySelector('.date').value;
+        const a = r.querySelector('.amount').value;
+        const n = r.querySelector('.nav').value;
+        csv += `${d},${a},${n}\n`;
+      });
+      const finalD = document.getElementById('finalDate').value;
+      const finalN = document.getElementById('finalNav').value;
+      csv += `${finalD},Total,${finalN}\n`;
+      csv += `XIRR%,${document.getElementById('xirrResult').value}\n`;
+      csv += `TotalFunds,${document.getElementById('totalFunds').value}\n`;
+      csv += `Profit,${document.getElementById('profit').value}\n`;
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `${invName || 'xirr'}_data.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    /*========== LIVE NAV FETCH (STUB) ==========*/
+    function fetchNAV(idx) {
+      const fund = document.getElementById('invName').value.trim();
+      const date = idx==='final'
+        ? document.getElementById('finalDate').value
+        : document.querySelectorAll('.flow-row')[idx].querySelector('.date').value;
+      if (!fund || !date) return alert('Provide investment name & date first');
+      // Replace below with real API call:
+      // fetch(`https://api.example.com/nav?fund=${fund}&date=${date}`)
+      //   .then(r=>r.json()).then(j=> setNAV(idx, j.nav))
+      //   .catch(() => alert('Failed to fetch NAV'));
+      // Demo stub:
+      const fakeNav = (Math.random()*20 + 20).toFixed(4);
+      setTimeout(()=> setNAV(idx, fakeNav), 400);
+    }
+    function setNAV(idx, nav) {
+      if (idx==='final') {
+        document.getElementById('finalNav').value = nav;
+        validateNumber({value:nav}, 'finalNavField');
+      } else {
+        const row = document.querySelectorAll('.flow-row')[idx];
+        row.querySelector('.nav').value = nav;
+        validateNumber({value:nav}, `navField-${idx}`);
+      }
+    }
+  </script>
+</body>
+</html>
