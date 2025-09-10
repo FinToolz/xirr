@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>XIRR Calculator</title>
+  <style>
+    body { font-family: Arial; margin: 40px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }
+    input[type="date"], input[type="number"] { width: 90%; }
+    button { padding: 10px 20px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h1>XIRR Calculator 🧮</h1>
+  <table id="cashFlowTable">
+    <tr>
+      <th>Date</th>
+      <th>Amount</th>
+      <th>Action</th>
+    </tr>
+  </table>
+  <button onclick="addRow()">➕ Add Transaction</button>
+  <button onclick="calculateXIRR()">📈 Calculate XIRR</button>
+  <h2 id="result"></h2>
+
+  <script>
+    function addRow() {
+      const table = document.getElementById("cashFlowTable");
+      const row = table.insertRow();
+      row.innerHTML = `
+        <td><input type="date"></td>
+        <td><input type="number" step="0.01"></td>
+        <td><button onclick="this.parentElement.parentElement.remove()">❌</button></td>
+      `;
+    }
+
+    function calculateXIRR() {
+      const rows = document.querySelectorAll("#cashFlowTable tr");
+      const cashFlows = [];
+      const dates = [];
+
+      rows.forEach((row, i) => {
+        if (i === 0) return; // skip header
+        const date = new Date(row.cells[0].querySelector("input").value);
+        const amount = parseFloat(row.cells[1].querySelector("input").value);
+        if (!isNaN(date) && !isNaN(amount)) {
+          dates.push(date);
+          cashFlows.push(amount);
+        }
+      });
+
+      try {
+        const rate = xirr(cashFlows, dates);
+        document.getElementById("result").innerText = `Estimated XIRR: ${(rate * 100).toFixed(2)}%`;
+      } catch (e) {
+        document.getElementById("result").innerText = "Error calculating XIRR.";
+      }
+    }
+
+    function xirr(cashFlows, dates, guess = 0.1) {
+      const maxIter = 1000, tol = 1e-6;
+      let rate = guess;
+
+      function xnpv(rate) {
+        return cashFlows.reduce((acc, val, i) => {
+          const days = (dates[i] - dates[0]) / (1000 * 60 * 60 * 24);
+          return acc + val / Math.pow(1 + rate, days / 365);
+        }, 0);
+      }
+
+      function dxnpv(rate) {
+        return cashFlows.reduce((acc, val, i) => {
+          const days = (dates[i] - dates[0]) / (1000 * 60 * 60 * 24);
+          const frac = days / 365;
+          return acc - (val * frac) / Math.pow(1 + rate, frac + 1);
+        }, 0);
+      }
+
+      for (let i = 0; i < maxIter; i++) {
+        const f = xnpv(rate), df = dxnpv(rate);
+        const newRate = rate - f / df;
+        if (Math.abs(newRate - rate) < tol) return newRate;
+        rate = newRate;
+      }
+
+      throw new Error("XIRR calculation did not converge");
+    }
+
+    addRow(); // Add initial row
+  </script>
+</body>
+</html>
