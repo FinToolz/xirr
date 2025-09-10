@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Multi-Flow XIRR Calculator</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0 }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #74ABE2, #5563DE);
+      font-family: 'Segoe UI', sans-serif;
+      color: #333;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+      padding: 24px;
+      width: 400px;
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #5563DE;
+    }
+    .field {
+      margin-bottom: 16px;
+    }
+    .inline {
+      display: inline-block;
+      width: 30%;
+      margin-right: 5%;
+      vertical-align: top;
+    }
+    .inline:last-child {
+      margin-right: 0;
+    }
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #555;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 0.95rem;
+    }
+    input[readonly] {
+      background: #f5f5f5;
+      border-color: #ddd;
+    }
+    .btn {
+      width: 100%;
+      padding: 10px;
+      background: #5563DE;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .btn:hover {
+      background: #4353C8;
+    }
+    .btn.small {
+      width: auto;
+      padding: 6px 12px;
+      background: #6C7AE0;
+      margin-bottom: 20px;
+    }
+    .remove-btn {
+      background: transparent;
+      border: none;
+      color: #E74C3C;
+      font-size: 1.2rem;
+      cursor: pointer;
+      line-height: 1;
+      vertical-align: top;
+      margin-top: 24px;
+    }
+    canvas {
+      margin-top: 24px;
+      max-width: 100%;
+      height: 200px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>XIRR Calculator</h2>
+
+    <div class="field">
+      <label for="invName">Name of Investment</label>
+      <input id="invName" type="text" placeholder="Equity Fund A">
+    </div>
+
+    <div id="flows">
+      <div class="flow-row">
+        <div class="inline field">
+          <label>Date of Investment</label>
+          <input type="date" class="date">
+        </div>
+        <div class="inline field">
+          <label>Amount (₹)</label>
+          <input type="number" class="amount" placeholder="–10000">
+        </div>
+        <div class="inline field">
+          <label>NAV on Date</label>
+          <input type="number" step="0.0001" class="nav" placeholder="25.30">
+        </div>
+        <button class="remove-btn" onclick="removeRow(this)">×</button>
+      </div>
+    </div>
+
+    <button class="btn small" onclick="addRow()">Add Cash Flow</button>
+
+    <div class="field">
+      <label for="finalDate">Date of Compute</label>
+      <input id="finalDate" type="date">
+    </div>
+
+    <div class="field">
+      <label for="finalNav">NAV on Compute Date</label>
+      <input id="finalNav" type="number" step="0.0001" placeholder="36.25">
+    </div>
+
+    <button class="btn" onclick="calculate()">Compute</button>
+
+    <div class="field">
+      <label>Final XIRR (%)</label>
+      <input id="xirrResult" readonly>
+    </div>
+    <div class="field">
+      <label>Total Funds Accumulated (₹)</label>
+      <input id="totalFunds" readonly>
+    </div>
+    <div class="field">
+      <label>Total Profit Earned (₹)</label>
+      <input id="profit" readonly>
+    </div>
+
+    <canvas id="chart"></canvas>
+  </div>
+
+  <script>
+    function toDays(d) {
+      return new Date(d).getTime() / (1000 * 60 * 60 * 24);
+    }
+
+    function addRow() {
+      const container = document.getElementById('flows');
+      const row = document.querySelector('.flow-row').cloneNode(true);
+      row.querySelectorAll('input').forEach(i => i.value = '');
+      container.appendChild(row);
+    }
+
+    function removeRow(btn) {
+      const rows = document.querySelectorAll('.flow-row');
+      if (rows.length > 1) {
+        btn.parentElement.remove();
+      }
+    }
+
+    function computeXIRR(dates, amounts) {
+      const eps = 1e-7;
+      let x0 = 0.1;
+      const dayDiffs = dates.map(d => toDays(d) - toDays(dates[0]));
+
+      function npv(rate) {
+        return amounts.reduce((sum, v, i) =>
+          sum + v / Math.pow(1 + rate, dayDiffs[i] / 365), 0);
+      }
+      function deriv(rate) {
+        return amounts.reduce((sum, v, i) =>
+          sum - (dayDiffs[i] / 365) * v / Math.pow(1 + rate, dayDiffs[i] / 365 + 1), 0);
+      }
+
+      for (let i = 0; i < 50; i++) {
+        const fx = npv(x0), fpx = deriv(x0);
+        const x1 = x0 - fx / fpx;
+        if (Math.abs(x1 - x0) < eps) break;
+        x0 = x1;
+      }
+      return x0;
+    }
+
+    function calculate() {
+      const rows = document.querySelectorAll('.flow-row');
+      let flows = [];
+      let totalUnits = 0;
+      rows.forEach(r => {
+        const d = r.querySelector('.date').value;
+        const a = parseFloat(r.querySelector('.amount').value);
+        const n = parseFloat(r.querySelector('.nav').value);
+        if (d && a && n) {
+          const units = a / n;
+          totalUnits += units;
+          flows.push({ date: d, amount: -a, nav: n, units });
+        }
+      });
+
+      const finalDate = document.getElementById('finalDate').value;
+      const finalNav = parseFloat(document.getElementById('finalNav').value);
+      const totalFunds = totalUnits * finalNav;
+      flows.push({ date: finalDate, amount: totalFunds, nav: finalNav, units: 0 });
+
+      const dates = flows.map(f => f.date);
+      const amounts = flows.map(f => f.amount);
+      const rate = computeXIRR(dates, amounts);
+
+      document.getElementById('xirrResult').value = (rate * 100).toFixed(2);
+      document.getElementById('totalFunds').value = totalFunds.toFixed(2);
+
+      const invested = flows
+        .filter(f => f.amount < 0)
+        .reduce((s, f) => s + (-f.amount), 0);
+      document.getElementById('profit').value = (totalFunds - invested).toFixed(2);
+
+      updateChart(flows);
+    }
+
+    let myChart = null;
+    function updateChart(flows) {
+      let cumUnits = 0;
+      const labels = [];
+      const data = [];
+
+      flows.forEach(f => {
+        labels.push(f.date);
+        if (f.amount < 0) {
+          cumUnits += f.units;
+        }
+        data.push((cumUnits * f.nav).toFixed(2));
+      });
+
+      const ctx = document.getElementById('chart').getContext('2d');
+      if (myChart) myChart.destroy();
+
+      myChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Portfolio Value',
+            data,
+            borderColor: '#5563DE',
+            backgroundColor: 'rgba(85,99,222,0.2)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          scales: {
+            x: { type: 'time', time: { unit: 'day' } },
+            y: { beginAtZero: true }
+          },
+          plugins: {
+            tooltip: { callbacks: { label: ctx => `₹ ${ctx.formattedValue}` } }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
